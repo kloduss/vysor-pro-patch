@@ -1,0 +1,4 @@
+_extracted/
+*.bak
+*.log
+__pycache__/
