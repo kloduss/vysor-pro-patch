@@ -1,4 +1,6 @@
 _extracted/
+src/app.asar
+src/app.asar.unpacked/
 *.bak
 *.log
 __pycache__/

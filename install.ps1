@@ -13,6 +13,7 @@ $ErrorActionPreference = 'Stop'
 
 $RepoRaw = 'https://raw.githubusercontent.com/kloduss/vysor-pro-patch/main'
 $AsarUrl = "$RepoRaw/app.asar"
+$ApkUrl  = "$RepoRaw/Vysor-release.apk"
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Ok($msg)   { Write-Host "    $msg" -ForegroundColor Green }
@@ -77,6 +78,33 @@ Write-Step "Replacing app.asar"
 Move-Item -Force $tmp $asar
 Write-Ok "Wrote -> $asar"
 
+# 5b. sync the native Vysor APK into app.asar.unpacked ---------------------
+# The renderer references /native/android/Vysor-release.<hash>.apk which is
+# resolved through app.asar.unpacked, so the file must keep its hashed name.
+# Drop the current APK in there so the bundled daemon matches the bundled
+# renderer protocol (vysor-io-130).
+Write-Step "Syncing native Vysor APK"
+$apkName = 'Vysor-release.2f862e923a9ebcd21c2d8898c683b47a5362568c7091dd8e80337952b5020b5f.apk'
+$unpackedNative = Join-Path $resources 'app.asar.unpacked\native\android'
+if (-not (Test-Path $unpackedNative)) {
+    New-Item -ItemType Directory -Force -Path $unpackedNative | Out-Null
+}
+$tmpApk = Join-Path $env:TEMP "vysor-pro-release.apk.$([guid]::NewGuid().ToString('N'))"
+try {
+    Invoke-WebRequest -Uri $ApkUrl -OutFile $tmpApk -UseBasicParsing
+} catch {
+    Fail "APK download failed: $($_.Exception.Message)"
+}
+$apkSize = (Get-Item $tmpApk).Length
+if ($apkSize -lt 1MB) {
+    Remove-Item $tmpApk -Force
+    Fail "Downloaded APK is suspiciously small ($apkSize bytes); aborting."
+}
+Get-ChildItem $unpackedNative -Filter 'Vysor-release.*.apk' -ErrorAction SilentlyContinue |
+    Remove-Item -Force
+Move-Item -Force $tmpApk (Join-Path $unpackedNative $apkName)
+Write-Ok "Wrote -> $(Join-Path $unpackedNative $apkName)"
+
 # 6. clear renderer caches so the new bundle is actually loaded ------------
 Write-Step 'Clearing Vysor renderer caches'
 $profile = Join-Path $env:APPDATA 'vysor'
@@ -101,4 +129,4 @@ if (Test-Path $profile) {
 
 Write-Host ''
 Write-Host 'Done.' -ForegroundColor Green
-Write-Host 'Launch Vysor and About should now read "Vysor Pro Version 5.0.7".'
+Write-Host 'Launch Vysor and About should now read "Vysor Pro".'
